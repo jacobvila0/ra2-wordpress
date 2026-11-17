@@ -237,3 +237,116 @@ También hemos creado un rol personalizado con permisos específicos y comprobad
 Por último, hemos seleccionado e instalado plugins para ampliar las funcionalidades de PlasmaZone: almacenamiento de formularios, consentimiento de cookies y registro de actividad.
 
 La práctica nos ha ayudado a entender la importancia de aplicar permisos adecuados, mantener los plugins actualizados y utilizar únicamente los complementos necesarios.
+
+
+---
+
+## 4. Práctica 2 — Copias de seguridad automatizadas
+
+### 4.1. Objetivo
+
+El objetivo de esta práctica ha sido aprender a realizar copias de seguridad de WordPress y MariaDB, automatizarlas y comprobar que permiten recuperar información eliminada.
+
+Hemos trabajado con nuestro proyecto PlasmaZone, instalado con Docker Compose en Kubuntu.
+
+### 4.2. Copia de los volúmenes Docker
+
+Primero identificamos los volúmenes:
+
+- `ra2-wordpress_db_data`: datos de MariaDB.
+- `ra2-wordpress_wp_data`: archivos de WordPress.
+
+Realizamos una copia manual del volumen de WordPress utilizando un contenedor Alpine.
+
+El archivo generado fue `volumen_wp_data.tar.gz`, con un tamaño aproximado de 68 MB.
+
+Comprobamos que el archivo comprimido no tenía errores con `gzip -t`.
+
+### 4.3. Copia de la base de datos
+
+Utilizamos `mariadb-dump` para exportar la base de datos de WordPress y comprimimos el resultado con gzip.
+
+El archivo `prueba.sql.gz` ocupaba aproximadamente 283 KB.
+
+Comprobamos el contenido del SQL y verificamos que incluía 18 tablas, correspondientes a WordPress y sus plugins.
+
+### 4.4. Automatización mediante backup.sh
+
+Creamos el script `scripts/backup.sh` para realizar las copias mediante una sola orden:
+
+`./scripts/backup.sh`
+
+El script realiza las siguientes tareas:
+
+1. Comprueba que MariaDB y WordPress están funcionando.
+2. Exporta la base de datos a un archivo `.sql.gz`.
+3. Comprime la carpeta `wp-content` en un archivo `.tar.gz`.
+4. Comprueba la integridad de ambos archivos.
+5. Conserva como máximo las siete últimas copias de cada tipo.
+
+Durante las pruebas apareció una vez el error `file changed as we read it`, porque algún archivo cambió mientras tar lo comprimía.
+
+Al repetir la operación, la copia terminó correctamente.
+
+### 4.5. Prueba de restauración
+
+Creamos el script `scripts/restore.sh` para recuperar la base de datos y los archivos de WordPress.
+
+Para comprobar su funcionamiento realizamos una prueba de pérdida de información controlada.
+
+**Copia utilizada:** `20261117-163120`
+
+**Archivos de la copia:**
+
+- `db_20261117-163120.sql.gz` — 291 KB.
+- `wp-content_20261117-163120.tar.gz` — 47 MB.
+
+Primero creamos la entrada `Prueba restauracion RA3`, con ID 98.
+
+Después realizamos una copia de seguridad que incluía esta entrada y el plugin Flamingo.
+
+A continuación, eliminamos la entrada y el plugin mediante:
+
+`./wp post delete 98 --force`
+
+`./wp plugin delete flamingo`
+
+Finalmente ejecutamos:
+
+`./scripts/restore.sh 20261117-163120`
+
+Confirmamos la restauración escribiendo `SI`.
+
+**Resultados obtenidos:**
+
+- La base de datos se restauró sin errores.
+- Los archivos de `wp-content` se recuperaron.
+- WordPress y Nginx volvieron a iniciarse.
+- La entrada ID 98 apareció nuevamente con su título original.
+- El plugin Flamingo volvió a aparecer instalado y activo, en su versión 2.6.4.
+
+Por tanto, comprobamos que los archivos de copia permiten recuperar el contenido eliminado en esta prueba.
+
+### 4.6. Programación automática con cron
+
+Configuramos cron para ejecutar `backup.sh` los martes y miércoles a las 13:30.
+
+La tarea guarda la salida del script en `backups/backup.log`.
+
+Comprobamos que el servicio cron estaba activo y que la tarea había quedado registrada.
+
+La ejecución automática requiere que Kubuntu esté encendido y que Docker y los contenedores necesarios estén disponibles.
+
+### 4.7. Seguridad de las copias
+
+Las copias de seguridad se guardan en la carpeta `backups/`.
+
+Esta carpeta está excluida del repositorio mediante `.gitignore`, ya que las copias pueden contener datos privados de WordPress.
+
+En GitHub se guardarán los scripts de copia y restauración, pero no los archivos de datos.
+
+### 4.8. Conclusión
+
+En esta práctica hemos aprendido a copiar volúmenes Docker, exportar bases de datos, crear scripts Bash y automatizar tareas con cron.
+
+La parte más importante ha sido realizar una restauración real, porque hemos demostrado que podemos recuperar una entrada y un plugin después de eliminarlos.
